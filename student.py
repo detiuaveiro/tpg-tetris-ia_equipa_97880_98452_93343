@@ -51,7 +51,7 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
         SCREEN.blit(SPRITES, (0, 0))
 
         n = 0
-        gamestate=[0,0,0,0,0,0,0,0,0,0] # The height of each column
+        gamestate=[30 for i in range(8)] # The height of each column
 
         while True:
             try:
@@ -60,7 +60,7 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                 )  # receive game update, this must be called timely or your game will get out of sync with the server
                 
                 if n < 100:
-                    print(state)
+                    #print(state)
                     n += 1
                 
                 # Next lines are only for the Human Agent, the key values are nonetheless the correct ones!
@@ -68,6 +68,7 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
 
                 if state['piece'] is None:
                     gamestate = findState(gamestate, state['game'])
+                    print(gamestate)
                     continue
 
                 isI = discover_i(state['piece'])
@@ -77,9 +78,10 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                     key = "d"
                 else:
                     maior = gamestate.index(max(gamestate)) 
-                    if state['piece'][2][0] < maior:
+                    print("MAIOR: ",maior)
+                    if state['piece'][0][0] < maior:
                         key = 'd'
-                    elif state['piece'][2][0] > maior:
+                    elif state['piece'][0][0] > maior:
                         key = 'a'
                     else:
                         key = 's'
@@ -112,7 +114,7 @@ def discover_i(piece):
 
 def findState(state, game):
     for block in game:
-        state[ block[0] ] = block[1]
+        state[ block[0]-1 ] = block[1]
     return state
 
 
