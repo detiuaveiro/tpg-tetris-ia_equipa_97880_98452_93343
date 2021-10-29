@@ -51,6 +51,7 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
         SCREEN.blit(SPRITES, (0, 0))
 
         n = 0
+        gamestate=[0,0,0,0,0,0,0,0,0,0] # The height of each column
 
         while True:
             try:
@@ -59,40 +60,62 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                 )  # receive game update, this must be called timely or your game will get out of sync with the server
                 
                 if n < 100:
-                    print(state['piece'])
+                    print(state)
                     n += 1
                 
                 # Next lines are only for the Human Agent, the key values are nonetheless the correct ones!
                 key = ""
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        pygame.quit()
 
-                    if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_UP:
-                            key = "w"
-                        elif event.key == pygame.K_LEFT:
-                            key = "a"
-                        elif event.key == pygame.K_DOWN:
-                            key = "s"
-                        elif event.key == pygame.K_RIGHT:
-                            key = "d"
+                if state['piece'] is None:
+                    gamestate = findState(gamestate, state['game'])
+                    continue
 
-                        elif event.key == pygame.K_d:
-                            import pprint
+                isI = discover_i(state['piece'])
+                if isI[1]:
+                    key = 'w'
+                elif isI[0]:
+                    key = "d"
+                else:
+                    maior = gamestate.index(max(gamestate)) 
+                    if state['piece'][2][0] < maior:
+                        key = 'd'
+                    elif state['piece'][2][0] > maior:
+                        key = 'a'
+                    else:
+                        key = 's'
+                    
 
-                            pprint.pprint(state)
-
-                        await websocket.send(
-                            json.dumps({"cmd": "key", "key": key})
-                        )  # send key command to server - you must implement this send in the AI agent
-                        break
+                await websocket.send(
+                    json.dumps({"cmd": "key", "key": key})
+                )  # send key command to server - you must implement this send in the AI agent
+                
             except websockets.exceptions.ConnectionClosedOK:
                 print("Server has cleanly disconnected us")
                 return
 
             # Next line is not needed for AI agent
             pygame.display.flip()
+
+# checks if the piece is an I, b[0] says if it's horizontal, b[1] says if it's vertical
+def discover_i(piece):
+    if piece != None:
+        x = piece[0][0]
+        y = piece[0][1]
+        b = [True,True]
+        for coor in piece:
+            if coor[0] != x:
+                b[0] = False
+            if coor[1] != y:
+                b[1] = False
+        return b  
+    return [False,False]
+
+def findState(state, game):
+    for block in game:
+        state[ block[0] ] = block[1]
+    return state
+
+
 
 # DO NOT CHANGE THE LINES BELLOW
 # You can change the default values using the command line, example:
