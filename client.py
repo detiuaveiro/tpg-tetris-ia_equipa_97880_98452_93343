@@ -24,12 +24,17 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
         SPRITES = pygame.image.load("data/pad.png").convert_alpha()
         SCREEN.blit(SPRITES, (0, 0))
 
+        n = 0
+
         while True:
             try:
                 state = json.loads(
                     await websocket.recv()
                 )  # receive game update, this must be called timely or your game will get out of sync with the server
 
+                if n < 100:
+                    print(state['piece'])
+                    n += 1
                 # Next lines are only for the Human Agent, the key values are nonetheless the correct ones!
                 key = ""
                 for event in pygame.event.get():
