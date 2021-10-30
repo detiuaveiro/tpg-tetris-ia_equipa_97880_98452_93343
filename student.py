@@ -52,6 +52,7 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
 
         n = 0
         gamestate=[30 for i in range(8)] # The height of each column
+        current_piece = 0
 
         while True:
             try:
@@ -63,13 +64,17 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                     #print(state)
                     n += 1
                 
-                # Next lines are only for the Human Agent, the key values are nonetheless the correct ones!
                 key = ""
 
                 if state['piece'] is None:
+                    current_piece=None
                     gamestate = findState(gamestate, state['game'])
                     print(gamestate)
                     continue
+
+                if not current_piece:
+                    current_piece=what_is_this_pokemon(state['piece'])
+                    print("Current piece is a(n) "+current_piece)
 
                 isI = discover_i(state['piece'])
                 if isI[1]:
@@ -77,14 +82,15 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                 elif isI[0]:
                     key = "d"
                 else:
+                    #print("part's lowest: "+str(get_lowest_point(state['piece'])))
                     maior = gamestate.index(max(gamestate)) 
-                    print("MAIOR: ",maior)
+                    #print("MAIOR: ",maior)
                     if state['piece'][0][0] < maior:
                         key = 'd'
                     elif state['piece'][0][0] > maior:
                         key = 'a'
                     else:
-                        key = 's'
+                        pass
                     
 
                 await websocket.send(
@@ -117,7 +123,39 @@ def findState(state, game):
         state[ block[0]-1 ] = block[1]
     return state
 
+def what_is_this_pokemon(piece):
+    """I'm sure this can be improved. Base 3 maybe?"""
+    is_i=discover_i(piece)
+    if is_i[0] or is_i[1]:
+        return "i"
+    print(discover_i(piece))
+    piece_code=[(piece[0][0]-piece[1][0], piece[0][1]-piece[1][1]),((piece[2][0]-piece[3][0], piece[2][1]-piece[3][1]))]
+    #print("current piece has a code of: "+str(piece_code))
+    if piece_code[0]==(-1,0):
+        if piece_code[1]==(0,-1):
+            return "l2"
+        if piece_code[1]==(-1,0):
+            return "o"
+    if piece_code[0]==(0,-1):
+        if piece_code[1]==(-1,0):
+            return "l1"
+        if piece_code[1]==(0,-1):
+            return "s1"
+        if piece_code[1]==(1,-1):
+            return "t"
+    if piece_code[0]==(1,-1):
+        return "s2"
 
+
+def get_lowest_point(piece):
+    print("piece parts: "+str(piece))
+    low=30
+    idx=-1
+    for i in piece:
+        if i[1]<low:
+            low=i[1]
+            idx=piece.index(i)
+    return idx
 
 # DO NOT CHANGE THE LINES BELLOW
 # You can change the default values using the command line, example:
