@@ -51,7 +51,7 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
         SCREEN.blit(SPRITES, (0, 0))
 
         n = 0
-        gamestate=[0,0,0,0,0,0,0,0,0,0] # The height of each column
+        gamestate=[30 for i in range(8)] # The height of each column
 
         while True:
             try:
@@ -68,6 +68,7 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
 
                 if state['piece'] is None:
                     gamestate = findState(gamestate, state['game'])
+                    continue
 
                 isI = discover_i(state['piece'])
                 if isI[1]:
@@ -75,7 +76,13 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                 elif isI[0]:
                     key = "d"
                 else:
-                    menor = min(gamestate)                   
+                    maior = gamestate.index(max(gamestate)) 
+                    if state['piece'][0][0] < maior:
+                        key = 'd'
+                    elif state['piece'][0][0] > maior:
+                        key = 'a'
+                    else:
+                        key = 's'
                     
 
                 await websocket.send(
@@ -105,7 +112,7 @@ def discover_i(piece):
 
 def findState(state, game):
     for block in game:
-        state[ block[0] ] = block[1]
+        state[ block[0] -1 ] = block[1]
     return state
 
 
