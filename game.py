@@ -45,7 +45,9 @@ class Game:
     def clear_rows(self):
         lines = 0
 
-        for item, count in Counter(y for _, y in self.game).most_common():
+        counter = Counter(y for _, y in self.game).most_common()
+        counter.sort() # sort to eliminate lines ordered by Y value
+        for item, count in counter:
             if count == len(self._bottom) - 2:
                 self.game = [(x, y) for (x, y) in self.game if y != item]  # remove row
                 self.game = [

@@ -93,6 +93,7 @@ def validate_move(gamestate, piece, high_points):
     for item, count in Counter(y for _, y in gamestate + piece).most_common():
         if count == 8 and item!= 30:
             lines += 1
+        
 
     points += (lines ** 2)
     
