@@ -1,14 +1,15 @@
 
 from collections import Counter
+import logging
 
 from shape import S
 
-
-_bottom = [[i, 30] for i in range(10)]  # bottom
-_lateral = [[0, i] for i in range(30)]  # left
+logging.basicConfig(filename='playground.log', level=logging.DEBUG)
+_bottom = [[i, 30] for i in range(10)]  # bottom of the game viewer
+_lateral = [[0, i] for i in range(30)]  # left of the game viewer
 _lateral.extend([[10 - 1, i] for i in range(30)])
 
-
+# grid = game boundaries
 grid = _bottom + _lateral
 #print(grid)
 
@@ -85,99 +86,114 @@ piece_rotations = {
     ]
 }
 
+# ---------------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------
 
 # Rank the move based on different criteria
 def validate_move(gamestate, piece, high_points):
-    lines = 0
-    points = 0
-    for item, count in Counter(y for _, y in gamestate + piece).most_common():
-        if count == 8 and item!= 30:
-            lines += 1
-        
+    
+    
+    allBlocks = gamestate + piece # blocks of all already set pieces + blocks of new piece (all blocks in board)
+    #print("ALL BLOCKS: ", allBlocks)
+    x_coords = []
+    y_coords = []
+    for block in piece:
+        if block[0] not in x_coords:
+            x_coords.append(block[0])
+        if block[1] not in y_coords:
+            y_coords.append(block[1])
 
+    points = 0 # score of a given piece placement
+
+    ### ------ ENCOURAGE COMPLETING LINES ------ 
+    lines = 0 # number of lines completed with a given piece placement
+    piece_min_height = min([p[1] for p in piece])
+    counter = [y for _, y in allBlocks if y in y_coords ]
+
+    # checking if any lines are complete
+    for item, count in Counter(counter).most_common():
+        if count == 8 and item != 30:
+            lines += 1 # if so, increment "lines"
+        elif count == 7:
+            # Motivate the piece to form holes of more than one block to wrack more points
+            if piece_min_height > 20:
+                points += 3
+
+    # the point score increments exponentially according to the number of lines completed at once by a piece placement
     points += (lines ** 2)
-    
-    print("FROM LINES", points)
-    tmp1 = points
-    tmp = gamestate + piece
-    x = []
-    for i in piece:
-        if i[0] not in x:
-            x.append(i[0])
 
-    
-    #print("X",x)
-    for xx in x:
-        t = [b[1] for b in tmp if b[0] == xx ]
-        
-        t.sort()
-        #print("t", t)
-        for i in range(len(t)-1):
-            if t[i+1] - t[i] > 1:
-                points-= t[i+1] - t[i]
-    print("FROM HOLES", points - tmp1)
-    tmp1 = points
-    print(high_points)
-    tmp2 = [i for i in high_points]
-    for p in piece:
-        tmp2[ p[0] -1 ] = p[1] if p[1] < high_points[ p[0] -1 ] else high_points[ p[0] -1 ]
-    print(tmp2)
-    min = 30
-    desv = 0
-    for column in tmp2:
-        if min - column > desv:
-            desv = min - column
-            min = column
-    points -= desv
-    print("FROM HEIGHT", points - tmp1)
+    logging.debug(f"FROM LINES: {(lines ** 2)} / {points - (lines ** 2)}")
+    before = points
+    ### ------ DISCOURAGE HOLES ------
+    for x in x_coords:
+        column = [high_points[x -1]] + [p[1] for p in piece if p[0] == x]
+        column.sort()
+        for i in range(len(column)-1):
+            if column[i+1] - column[i] > 1:
+                points-= (column[i+1] - column[i]) * 2
+
+    logging.debug(f"FROM HOLES: {points - before}")
+    before = points
+    ### ------ ENCOURAGE FLAT PLAYING STYLE ------
+
+    top_of_the_piece = min(y_coords)
+    points -= (30 - top_of_the_piece)
+
+    #logging.debug(f"TMP2: {tmp2}, {round(tmp2/10)}")
+
+    logging.debug(f"FROM HEIGHT: {points - before}")
+    logging.debug(f"TOTOAL: {points}")
     return points
         
 
-# Check if a piece can be there
-def valid(piece, gamestate):
-        return not any(
-            [piece_part in grid for piece_part in piece]
-        ) and not any(
-            [piece_part in gamestate for piece_part in piece]
-        )
+# Check if a piece placement is valid (doesn't overlap with anything)
+def valid(placement, gamestate):
+    # check if the piece placement doesn't overlap with the game boundaries
+    return not any(
+        [block in grid for block in placement]
+    # check if the piece placement doesn't overlap with any already set pieces
+    ) and not any(
+        [block in gamestate for block in placement]
+    )
 
 # Calculate the possible move at a certain column
 def calculate_move(gamestate, piece, column, high_points):
 
-    t = [block[1] for block in gamestate if block[0] == column]
+    ### GAMESTATE: list of lists
+    ### [ [columnNumber, height], [columnNumber, height], [columnNumber, height], ...  ], for the 8 columns
+    ### if column 5 has 3 stacked blocks, all [5,30], [5,29] and [5,28] (the used up blocks) will be in the list of lists
+    ### this allows us to see when a full line is formed
 
-    if not t:
-        pivot = 29
-    else:
-        pivot = min(t)
-    n = 1
-    #print("Pivot", pivot)
-    for n in range(1,5):
-        tmp = [[p[0] + column,p[1] + pivot - n] for p in piece ]
+    ### PIECE: list of 4 lists (each of the smaller lists is the position of one of the piece's blocks)
+    ### the piece is already in one of its positions, see the big map on top with the rotations of each type of piece
 
-        if valid(tmp,gamestate):
-            #print(tmp)
-            #print(gamestate)
-            #print(validate_move(gamestate,tmp))
-            return validate_move(gamestate,tmp, high_points), tmp
+    blocksInColumn = [block[1] for block in gamestate if block[0] == column]
 
+    if not blocksInColumn: # column is empty
+        pivot = 29 # so we're on the floor
+    else: # column already has blocks
+        pivot = min(blocksInColumn) # get the highest (y axis goes downwards)
+        
+    # we're gonna try to find a piece placement now. a piece is 4 blocks tall maximum
+    # we try to place it as it is. if it's not possible (because it's overlapping with pieces already in the game), we
+    # adjust it one block up (because if it overlaps, it overlaps at the bottom)
+    # range(1,5) = [1,2,3,4], four possible adjustments (bc of the max piece height)
+    for adjust in range(1,5): 
+        # block = block in piece (it's a list with 2 coordinates for that block)
+        # block[0]=x, block[1]=y
+        #               x + column       y + pivot - n
+        # the placement is given in absolute coords in the game viewer
+        placement = [ [ block[0]+column, block[1]+pivot-adjust ] for block in piece ]
 
-
-
-"""
-gs = [[1,28],[2,28],[3,29],[3,28],[4,29],[4,28],[4,27],[5,27],[6,29],[6,28],[7,28],[5,28]]
-
-piece_r = [
-    [[0,0],[1,0],[2,0],[2,-1]],
-    [[0,0],[0,-1],[0,-2],[-1,-2]],
-    [[0,0],[0,-1],[1,-1],[2,-1]],
-    [[0,0],[1,0],[0,-1],[0,-2]]
-]
-a = []"""
+        if valid(placement,gamestate): # check if the new piece doesn't overlap with already set game pieces for this placement
+            # "validate_move" ranks the move based on different criteria
+            # so we're returning the tuple (<ranking>,<placement>), so we can later choose the best one
+            return validate_move(gamestate,placement,high_points), placement
 
 def findState(state, game):
     for block in game:
-        state[ block[0]-1 ] = block[1]
+        state[ block[0]-1 ] = block[1] if block[1] < state[ block[0]-1 ] else state[ block[0]-1 ]
     return state
 
 def discover_i(piece):
@@ -218,30 +234,36 @@ def what_is_this_pokemon(piece):
 
 # get the best possible move of a given piece
 def tetris(piece_r, gamestate, high_points):
+    ### PIECE_R: piece rotations
+    ### in order to assess which is the best move for a new piece, we need to take into account all of the possible
+    ### placements of said piece, in all its possible positions (rotations)
+    ### if we're trying to place a T piece (for example), piece_r will be the list of lists containing all of T's
+    ### possible rotations (this information is taken directly from the big rotations map on top of the code)
 
-    score = None
-    n = 0
-    a = []
-    for piece in piece_r:
-        #print("P",piece)
-        for i in range(1,9):
-            print("I:", i)
-            s = calculate_move(gamestate,piece,i, high_points)
-            print(s)
-            if score is None and s is not None:
-                score = s[0]
-                a = [s[1], n, s[0]]
-            elif s is not None and score < s[0]:
-                score = s[0]
-                a = [s[1], n, s[0]]
-        n += 1
-    print(a)
-    return a
+    highestScore = None # score of the highest scoring position for this piece
+    rotationIdx = 0 # index of the position in piece_r (tells us which position we're talking about)
+    bestPosition = [] # information about the highest scoring position, format = [<score>,<positionIdx>,<piece placement>]
+    for piece in piece_r: # for each rotation of the piece
+        for column in range(1,9): # for each column
+            logging.debug(f"Column: {column}")
+            piece_score = calculate_move(gamestate, piece, column, high_points) # piece_score = (<score>,<piece placement>)
+            logging.debug(f"Move: {piece_score}")
 
+            # ------ store the information of the highest scoring position in bestPosition ------
+            if highestScore is None and piece_score is not None:
+                highestScore = piece_score[0]
+                bestPosition = [piece_score[1], rotationIdx, piece_score[0]]
+            elif piece_score is not None and highestScore < piece_score[0]:
+                highestScore = piece_score[0]
+                bestPosition = [piece_score[1], rotationIdx, piece_score[0]]
+            # -----------------------------------------------------------------------------------
+        rotationIdx += 1
+    logging.debug(f"Best Result: {bestPosition}")
+    return bestPosition
 
-
-
-
+# ---------------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------
 
 import asyncio
 import getpass
@@ -269,9 +291,9 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
         SCREEN.blit(SPRITES, (0, 0))
 
         n = 0
-        high_points = [30 for i in range(8)] # The height of each column
         obj = None
         while 1:
+            high_points = [30 for i in range(8)] # The height of each column
             try:
                 state = json.loads(
                     await websocket.recv()
@@ -283,26 +305,26 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                     if not obj:
                         # get the high_points of the current board
                         if n != 0:
-                            n += 1
                             high_points = findState(high_points, state["game"])
-
+                        n += 1
                         # find out what the current piece is 
                         piece_type = what_is_this_pokemon(state["piece"])
-                        print("TYPE:",piece_type)
+                        #print("TYPE:",piece_type)
+                        logging.debug(f"TYPE: {piece_type}")
                         # get the rotations of the current piece
                         c_piece = piece_rotations.get(piece_type)
                         # add the floor border to calculate HOLES based on it
                         tmp = state["game"] + [[i,30] for i in range(1,9)] 
                         obj = tetris(c_piece, tmp, high_points)
-                        print("OOOBJ", obj)
+                        #print("OOOBJ", obj)
                     else:
                         # TODO Make bot generate all the output in one go
                         if obj[1] != 0:
-                            print(obj[1])
+                            #print(obj[1])
                             key = "w" 
                             obj[1] -= 1
                         else:
-                            print("Local: ",state["piece"])
+                            #print("Local: ",state["piece"])
                             left = 0
                             right = 0
                             for p1 in state["piece"]:
@@ -317,7 +339,8 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                             elif right > left:
                                 key = "d"
                             else:
-                                key = "s"
+                                #key = "s"
+                                key = ""
 
                 await websocket.send(
                     json.dumps({"cmd": "key", "key": key})
