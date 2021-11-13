@@ -91,10 +91,28 @@ piece_rotations = {
     ]
 }
 
-        
+
+
+def validate_move(gamestate, piece, high_points, lines, lines_cleared, new_high_points, tabs):   
     
+    a = -0.510066
+    b = 0.760666
+    c = -0.35663
+    d = -0.184483
 
+    bumpiness = 0
+    area = 30 - new_high_points[-1]
+    for i in range(len(new_high_points)-1):
+        bumpiness += abs(new_high_points[i] - new_high_points[i+1]) 
+        area += 30 - new_high_points[i]
 
+    holes = (area - (len(gamestate) - 8))
+
+    points = a*area + b*lines + c*holes + d*bumpiness
+
+    return points
+
+"""
 # Rank the move based on different criteria
 def validate_move(gamestate, piece, high_points, lines, lines_cleared, new_high_points, tabs):
     points = 0
@@ -110,15 +128,15 @@ def validate_move(gamestate, piece, high_points, lines, lines_cleared, new_high_
     ##print((tabs)*"\t" + f"AREA {area}, GAMESTATE {len(gamestate)-8}, GH: {new_high_points}")
     
     points += lines**2
-    print((tabs)*"\t" +"FROM LINES", (lines ** 2))
+    #print((tabs)*"\t" +"FROM LINES", (lines ** 2))
     tmp1 = points
     points -= bumpiness//2
-    print((tabs)*"\t" +"FROM Bumpiness", points - tmp1)
+    #print((tabs)*"\t" +"FROM Bumpiness", points - tmp1)
     tmp3 = (area - (len(gamestate) - 8))*2
     tmp1 = points
     points -= tmp3
-    print((tabs)*"\t" + f"AREA {area}, GAMESTATE {len(gamestate)-8}, GH: {new_high_points}")
-    print(((tabs)*"\t" + f"FROM HOLES: {points - tmp1}"))
+    #print((tabs)*"\t" + f"AREA {area}, GAMESTATE {len(gamestate)-8}, GH: {new_high_points}")
+    #print(((tabs)*"\t" + f"FROM HOLES: {points - tmp1}"))
     
     
     #logging.debug(f"FROM LINES: {(lines ** 2)} / {points - (lines ** 2)}")
@@ -135,12 +153,14 @@ def validate_move(gamestate, piece, high_points, lines, lines_cleared, new_high_
     else:
         points -= round((30 - tmp2 + lines) * 1.50)
     #points -= round(30 - tmp2 + lines)
-    print((tabs)*"\t" + f"FROM HEIGHT: {points - tmp1}")
+    #print((tabs)*"\t" + f"FROM HEIGHT: {points - tmp1}")
+
+    points += lines**2 * tmp2
     #logging.debug(f"FROM HEIGHT: {points - tmp1}")
     #logging.debug((tabs*2)*"\t" + f"Total Points: {points}")
     #print((tabs)*"\t" + f"Total Points: {points}")
     return points
-        
+"""       
 
 # Check if a piece can be there
 def valid(piece, gamestate):
@@ -155,17 +175,21 @@ def calculate_move(gamestate, piece, column, xx, yy):
     #print(column)
     pivot = 31
     c = 0
+    tmp = []
     for block in gamestate:
+            
         if block[0] - column in xx:
-            print("AA",block, block[1] - yy[block[0] - column])
-        if block[0] - column in xx and block[1] - yy[block[0] - column] < pivot:
-            pivot = block[1]
-            c = block[0] - column
-    print("PIVOT", c, pivot)
-    print("PIECE", piece)
+            #print("AA",block, block[1] - yy[block[0] - column])
+            if block[1] - yy[block[0] - column] < pivot:
+                #print("BB", block)
+                pivot = block[1] - yy[block[0] - column]
+                c = block[0] - column
+                tmp = block
+    #print("PIVOT", c, pivot)
+    #print("PIECE", piece)
     offset = max([y[1] for y in piece if y[0] == c])
-    print("OFFSET", offset)
-    tmp = [[p[0] + column, pivot - 1 + p[1] - offset] for p in piece ]
+    #print("OFFSET", offset)
+    tmp = [[p[0] + column, tmp[1] - 1 + p[1] - offset] for p in piece ]
     return tmp
 
     #for n in range(2,-1,-1):
@@ -262,17 +286,17 @@ def tetris(type, gamestate, high_points, look_ahead, tabs):
                 floor_x.append(piece[i][0])
                 floor_y.append(piece[i][1])
                 prev_x = piece[i][0]
-        print("FLOOR:",floor_x, floor_y)
+        #print("FLOOR:",floor_x, floor_y)
         #print("L", 9 - len(xx))
         for i in range(1,9 - len(floor_x) + 1):
-            print(((tabs)*"\t" +str(n)+ " " + "TYPE: " + type + " " + str(i)))
+            #print(((tabs)*"\t" +str(n)+ " " + "TYPE: " + type + " " + str(i)))
             ##print("TYPE:", type, i)
             ##print("Column:", i)
             #logging.debug(f"Column: {i}, {type}")
             s = calculate_move(gamestate,piece,i,floor_x, floor_y)
             ##print("Move:", s)
             #logging.debug((tabs)*"\t" + f"Move: {s}")
-            print((tabs)*"\t" + f"Move: {s}")
+            #print((tabs)*"\t" + f"Move: {s}")
             if s is not None:
                 #logging.debug(f"OLDHP: {high_points}")
                 ##print(tabs*"\t" + f"OLD HP: {high_points}")
@@ -290,7 +314,7 @@ def tetris(type, gamestate, high_points, look_ahead, tabs):
                     if tmp > score:
                         score = tmp
                         a = [tmp, s, n, None]
-                    print(tabs*"\t" + f"SCORE: {tmp}") 
+                    #print(tabs*"\t" + f"SCORE: {tmp}") 
                 else:
                     #logging.debug(f"HG: {tmp2}")
                     tmp_score = validate_move(tmp1[0],s,high_points, tmp1[1],tmp1[2], tmp2, tabs)
@@ -311,7 +335,7 @@ def tetris(type, gamestate, high_points, look_ahead, tabs):
 
         n += 1
     #logging.debug((tabs*2)*"\t" + f"Best Result for {type}: {a}")
-    print((tabs)*"\t" + f"Best Result for {type}: {a}")
+    #print((tabs)*"\t" + f"Best Result for {type}: {a}")
     return a
 
 def tetris2(type, gamestate, high_points, look_ahead, parent, tabs):
@@ -350,7 +374,10 @@ def get_command(objective, piece_type, rotation, move):
     if move not in moves:
         command.extend(["w"] * rotation)
         pivot = min([p[0] for p in objective])
+        # pivot = 7
         piece = rot_x[piece_type][rotation]
+        # piece = 3
+        #print("ROT_X",rot_x[piece_type])
         translacao = pivot - piece
         if translacao < 0:
             command.extend("a"*(-1*translacao))
@@ -360,7 +387,7 @@ def get_command(objective, piece_type, rotation, move):
         moves[move] = command
     else:
         command = moves[move]
-    #print("C:",command,move)
+    print("C:",command,move)
     return command
 
 
@@ -441,14 +468,14 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                         #
                         tic = time.perf_counter()
 
-                        obj = tetris(piece_type, tmp, high_points,state['next_pieces'][0:0], 0)
+                        obj = tetris(piece_type, tmp, high_points,state['next_pieces'][0:1], 0)
                         toc = time.perf_counter()
                         count += 1
                         sum += (toc - tic)
-                        ##print(f"Elapsed time {toc - tic:0.4f} seconds")
+                        #print(f"Elapsed time {toc - tic:0.4f} seconds")
                         print("TYPE:",piece_type)
                         print("OOOBJ", obj)
-                        move = f"{obj[2]}" + "".join([str(x[0]) for x in obj[1]])
+                        move = f"{piece_type}{obj[2]}" + "".join([str(x[0]) for x in obj[1]])
 
 
                     elif b == 0 and command == [] and flg:
