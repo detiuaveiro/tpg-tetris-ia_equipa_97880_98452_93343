@@ -1,24 +1,31 @@
 
 from collections import Counter
-import math
-import time
-#import logging
 
 from shape import S
+import math
+import heapq
 
-#logging.basicConfig(filename='playground.log', level=#logging.DEBUG)
-_bottom = [[i, 30] for i in range(10)]  # bottom
-_lateral = [[0, i] for i in range(-5,30)]  # left
-_lateral.extend([[10 - 1, i] for i in range(-5,30)])
+_bottom : list
+_lateral : list  
+grid : list
+_height : int
 
-# grid = game boundaries
-grid = _bottom + _lateral
-#print(grid)
+rot_x = {}
+_moves = {} # a cache of previous made command sequences
 
-moves = {} # dicionario dos moves
-rot_x = {} # dicionario com as Xs de cada rotação para cada peça
+type_len = {
+    "i":2,
+    "o":1,
+    "s":2,
+    "z":2,
+    "j":4,
+    "l":4,
+    "t":4
+} # the number of rotations that each piece has
 
 # Map with the rotations of each piece
+"""
+This is how the map looks in an hardcoded way
 piece_rotations = {
     "i": [
         [
@@ -29,11 +36,11 @@ piece_rotations = {
         ]
     ],
     "o": [
-        [[0,0],[1,0],[0,-1],[1,-1]]
+        [[0,0],[0,-1],[1,0],[1,-1]]
     ],
     "s": [
         [
-            [0,0],[0,-1],[-1,-1],[-1,-2]
+            [0,-1],[0,-2],[1,0],[1,-1]
         ],
         [
             [0,0],[1,0],[1,-1],[2,-1]
@@ -44,18 +51,18 @@ piece_rotations = {
             [0,0],[0,-1],[1,-1],[1,-2]
         ],
         [
-            [0,0],[1,0],[1,1],[2,1]
+            [0,-1],[1,0],[1,-1],[2,0]
         ],
     ],
     "l": [
         [
-            [0,0],[1,0],[0,-1],[0,-2]
+            [0,0],[0,-1],[0,-2],[1,0]
         ],
         [
             [0,0],[0,-1],[1,-1],[2,-1]
         ],
         [
-            [0,0],[0,-1],[0,-2],[-1,-2]
+            [0,-2],[1,0],[1,-1],[1,-2]
         ],
         [
             [0,0],[1,0],[2,0],[2,-1]
@@ -66,13 +73,13 @@ piece_rotations = {
             [0,0],[0,-1],[0,-2],[1,-2]
         ],
         [
-            [0,0],[0,-1],[-1,-1],[-2,-1]
+            [0,-1],[1,-1],[2,0],[2,-1]
         ],                                     
         [
             [0,0],[1,0],[1,-1],[1,-2]
         ],
         [
-            [0,0],[1,0],[2,0],[0,-1]            
+            [0,0],[0,-1],[1,0],[2,0]           
         ],  
     ],
     "t": [
@@ -80,154 +87,84 @@ piece_rotations = {
             [0,0],[0,-1],[0,-2],[1,-1]
         ],
         [
-            [0,0],[1,0],[2,0],[1,1]
+            [0,-1],[1,0],[1,-1],[2,-1]
         ],
         [
-            [0,0],[0,-1],[0,-2],[-1,-1]
+            [0,-1],[1,0],[1,-1],[1,-2]
         ],
         [
-            [0,0],[1,0],[2,0],[1,-1]
+            [0,0],[1,0],[1,-1],[2,0]
         ]
     ]
 }
-
-# ---------------------------------------------------------------------------------------------------------------------------
-# ---------------------------------------------------------------------------------------------------------------------------
-# ---------------------------------------------------------------------------------------------------------------------------
 """
-OLD validate_move
-# Rank the move based on different criteria
-def validate_move(gamestate, piece, high_points):
-    
-    
-    allBlocks = gamestate + piece # blocks of all already set pieces + blocks of new piece (all blocks in board)
-    #print("ALL BLOCKS: ", allBlocks)
-    x_coords = []
-    y_coords = []
-    for block in piece:
-        if block[0] not in x_coords:
-            x_coords.append(block[0])
-        if block[1] not in y_coords:
-            y_coords.append(block[1])
 
-    points = 0 # score of a given piece placement
+piece_rotations = {}
 
-    ### ------ ENCOURAGE COMPLETING LINES ------ 
-    lines = 0 # number of lines completed with a given piece placement
-    piece_min_height = min([p[1] for p in piece])
-    counter = [y for _, y in allBlocks if y in y_coords ]
+class Jogada():
+    def __init__(self, score, positions, gamestate, high_points, rotation) -> None:
+        self.score = score
+        self.positions = positions
+        self.gamestate = gamestate
+        self.high_points = high_points
+        self.rotation = rotation
 
-    # checking if any lines are complete
-    for item, count in Counter(counter).most_common():
-        if count == 8 and item != 30:
-            lines += 1 # if so, increment "lines"
-        elif count == 7:
-            # Motivate the piece to form holes of more than one block to wrack more points
-            if piece_min_height > 20:
-                points += 3
+    def result(self):
+        return [self.score, self.positions, self.rotation]
 
-    # the point score increments exponentially according to the number of lines completed at once by a piece placement
-    points += (lines ** 2)
+    def __str__(self) -> str:
+        return str(self.rotation) + str(self.positions) + " Score:" + str(self.score)
 
-    #logging.debug(f"FROM LINES: {(lines ** 2)} / {points - (lines ** 2)}")
-    before = points
-    ### ------ DISCOURAGE HOLES ------
-    for x in x_coords:
-        column = [high_points[x -1]] + [p[1] for p in piece if p[0] == x]
-        column.sort()
-        for i in range(len(column)-1):
-            if column[i+1] - column[i] > 1:
-                points-= (column[i+1] - column[i]) * 2
 
-    #logging.debug(f"FROM HOLES: {points - before}")
-    before = points
-    ### ------ ENCOURAGE FLAT PLAYING STYLE ------
-
-    top_of_the_piece = min(y_coords)
-    points -= (30 - top_of_the_piece)
-
-    ##logging.debug(f"TMP2: {tmp2}, {round(tmp2/10)}")
-
-    #logging.debug(f"FROM HEIGHT: {points - before}")
-    #logging.debug(f"TOTOAL: {points}")
-    return points
-"""  
-
-def validate_move(piece, high_points, lines, lines_cleared):
-
-    points = 0
-
-    piece_columns = []
-    piece_rows = []
-    for i in piece:
-        if i[0] not in piece_columns and i[1] not in lines_cleared:
-            piece_columns.append(i[0])
-        if i[1] not in piece_rows:
-            piece_rows.append(i[1])
-
-    points += lines**2
+#
+# source: https://codemyroad.wordpress.com/2013/04/14/tetris-ai-the-near-perfect-player/
+#
+def validate_move(gamestate, lines, new_high_points):     
+    a = -0.510066
+    b = 0.760666
+    c = -0.35663
+    d = -0.184483
+    #print(new_high_points)
     bumpiness = 0
-    points -= bumpiness//2
-    
-    for xx in piece_columns:
-        t = [high_points[xx-1]] + [p[1] for p in piece if p[0] == xx]
-        t.sort()
+    area = _height - new_high_points[-1]
+    for i in range(len(new_high_points)-1):
+        bumpiness += abs(new_high_points[i] - new_high_points[i+1]) 
+        area += _height - new_high_points[i]
 
-        for i in range(len(t)-1):
-            if t[i+1] - t[i] > 1:
-                points -= (t[i+1] - t[i]) * 2 -1 if (t[i+1] - t[i]) < 6 else (t[i+1] - t[i]) - 2
-    tmp2 = min(piece_rows)
-    if tmp2 + lines < 10:
-        points -= (30 - tmp2 + lines) * 20
-    elif tmp2 + lines < 20:
-        points -= round((30 - tmp2 + lines) * 2)
-    else:
-        points -= round((30 - tmp2 + lines) * 1.50)
-    return points
+    holes = (area - (len(gamestate) - (len(_bottom)-2)))
 
-# Check if a piece placement is valid (doesn't overlap with anything)
-def valid(placement, gamestate):
-    # check if the piece placement doesn't overlap with the game boundaries
-    return not any(
-        [block in grid for block in placement]
-    # check if the piece placement doesn't overlap with any already set pieces
-    ) and not any(
-        [block in gamestate for block in placement]
-    )
+    points = a*area + b*lines + c*holes + d*bumpiness
+    #print(f"Area: {area}\nLines: {lines}\nHoles: {holes}\nBumpiness {bumpiness}")
+    return points 
+
+# Check if a piece can be there
+def valid(piece, gamestate):
+        return not any(
+            [piece_part in grid for piece_part in piece]
+        ) and not any(
+            [piece_part in gamestate for piece_part in piece]
+        )
+
 
 # Calculate the possible move at a certain column
-def calculate_move(gamestate, piece, column):
+def calculate_move(highpoints, piece, column, xx, yy):
+    #####print(column)
+    ###print("HP", gamestate)
+    pivot = [0, _height+1]
+    tmp = []
+    for x in xx:
+        if highpoints[column + x - 1] - yy[x] < pivot[1]:
+            pivot = [x, highpoints[column + x - 1] - yy[x]]
+            tmp = [x,highpoints[column + x - 1]]
 
-    ### GAMESTATE: list of lists
-    ### [ [columnNumber, height], [columnNumber, height], [columnNumber, height], ...  ], for the 8 columns
-    ### if column 5 has 3 stacked blocks, all [5,30], [5,29] and [5,28] (the used up blocks) will be in the list of lists
-    ### this allows us to see when a full line is formed
+    offset = max([y[1] for y in piece if y[0] == pivot[0]])
+    #####print("OFFSET", offset)
+    bb = [[p[0] + column, tmp[1] - 1 + p[1] - offset] for p in piece ]
+    return bb, tmp[1]
 
-    ### PIECE: list of 4 lists (each of the smaller lists is the position of one of the piece's blocks)
-    ### the piece is already in one of its positions, see the big map on top with the rotations of each type of piece
-
-    pivot = 30
+def getHighPoints(gamestate):
+    tmp = [_height] * (len(_bottom) - 2)
     for block in gamestate:
-        if block[0] == column and block[1] < pivot:
-            pivot = block[1]
-        
-    # we're gonna try to find a piece placement now. a piece is 4 blocks tall maximum
-    # we try to place it as it is. if it's not possible (because it's overlapping with pieces already in the game), we
-    # adjust it one block up (because if it overlaps, it overlaps at the bottom)
-    # range(1,5) = [1,2,3,4], four possible adjustments (bc of the max piece height)
-    for adjust in range(1,5): 
-        # block = block in piece (it's a list with 2 coordinates for that block)
-        # block[0]=x, block[1]=y
-        #               x + column       y + pivot - n
-        # the placement is given in absolute coords in the game viewer
-        placement = [ [ block[0]+column, block[1]+pivot-adjust ] for block in piece ]
-
-        if valid(placement,gamestate): # check if the new piece doesn't overlap with already set game pieces for this placement
-            return placement
-
-def getHighPoints(state, game):
-    tmp = state.copy()
-    for block in game:
         tmp[ block[0]-1 ] = block[1] if block[1] < tmp[ block[0]-1 ] else tmp[ block[0]-1 ]
     return tmp
 
@@ -244,14 +181,18 @@ def discover_i(piece):
         return b  
     return [False,False]
 
+#
+# Camila had a fix for not needing to use the discover_i
+#
+
 def what_is_this_pokemon(piece):
     """I'm sure this can be improved. Base 3 maybe?"""
     is_i=discover_i(piece)
     if is_i[0] or is_i[1]:
         return "i"
-    #print(discover_i(piece))
+    #####print(discover_i(piece))
     piece_code=[(piece[0][0]-piece[1][0], piece[0][1]-piece[1][1]),((piece[2][0]-piece[3][0], piece[2][1]-piece[3][1]))]
-    #print("current piece has a code of: "+str(piece_code))
+    #####print("current piece has a code of: "+str(piece_code))
     if piece_code[0]==(-1,0):
         if piece_code[1]==(0,-1):
             return "j"
@@ -267,118 +208,162 @@ def what_is_this_pokemon(piece):
     if piece_code[0]==(1,-1):
         return "z"
 
-#
-# Get the up to date gamestate and count the lines cleared
-#
-def clear_rows(gamestate):
+def clear_rows(gamestate, yy, pivot):
     tmp = gamestate.copy()
     lines = 0
-    counter = Counter(y for _, y in tmp).most_common()
+    counter = Counter(y for _, y in tmp if y - pivot in yy).most_common()
     counter.sort() # sort to eliminate lines ordered by Y value
-    lines_cleared = []
     for item, count in counter:
-        if count == 8 and item != 30:
+        if count == len(_bottom)-2 and item != _height:
             tmp = [(x, y) for (x, y) in tmp if y != item]  # remove row
             tmp = [
                 (x, y + 1) if y < item else (x, y) for (x, y) in tmp
             ]  # drop blocks above
             lines += 1
-            lines_cleared.append(count)
-    return tmp, lines, lines_cleared
+    return tmp, lines
 
 """
-OLD tetris
 # get the best possible move of a given piece
 def tetris(type, gamestate, high_points, look_ahead, tabs):
-    ### PIECE_R: piece rotations
-    ### in order to assess which is the best move for a new piece, we need to take into account all of the possible
-    ### placements of said piece, in all its possible positions (rotations)
-    ### if we're trying to place a T piece (for example), piece_r will be the list of lists containing all of T's
-    ### possible rotations (this information is taken directly from the big rotations map on top of the code)
+    ######print((tabs)*"\t"  + "TYPE: " + type)
+    ######print((tabs)*"\t"  + f"GS: {gamestate}")
     piece_r = piece_rotations[type]
-    highestScore = None # score of the highest scoring position for this piece
-    rotationIdx = 0 # index of the position in piece_r (tells us which position we're talking about)
-    bestPosition = [] # information about the highest scoring position, format = [<score>,<positionIdx>,<piece placement>]
-    for piece in piece_r: # for each rotation of the piece
-        for column in range(1,9): # for each column
-            ##logging.debug(f"Column: {column}")
-            piece_score = calculate_move(gamestate, piece, column, high_points) # piece_score = (<score>,<piece placement>)
-            ##logging.debug(f"Move: {piece_score}")
-
-            # ------ store the information of the highest scoring position in bestPosition ------
-            if highestScore is None and piece_score is not None:
-                highestScore = piece_score[0]
-                bestPosition = [piece_score[1], rotationIdx, piece_score[0]]
-            elif piece_score is not None and highestScore < piece_score[0]:
-                highestScore = piece_score[0]
-                bestPosition = [piece_score[1], rotationIdx, piece_score[0]]
-            # -----------------------------------------------------------------------------------
-        rotationIdx += 1
-    #logging.debug(f"Best Result: {bestPosition}")
-    return bestPosition
-"""
-def tetris(type, gamestate, high_points, look_ahead, tabs):
-    piece_r = piece_rotations[type]
+    best_score = -math.inf
     score = -math.inf
-    curr_rotation = 0
-    objective = []
+    n = 0
+    a = []
+    moves = []
     for piece in piece_r:
-        for i in range(1,9):
+        floor_x = []
+        floor_y = []
+        prev_x = -1
+        yy = []
+        for i in range(4):
+            if piece[i][0] != prev_x:
+                floor_x.append(piece[i][0])
+                floor_y.append(piece[i][1])
+                prev_x = piece[i][0]
+            if piece[i][1] not in yy:
+                yy.append(piece[i][y])
+        for i in range(1,9 - len(floor_x) + 1):
+            ###print(((tabs)*"\t" +str(n)+ " " + "TYPE: " + type + " " + str(i)))
+            s = calculate_move(high_points,piece,i,floor_x, floor_y)
 
-            move = calculate_move(gamestate,piece,i)
-
-            if move is not None:
+            ###print((tabs)*"\t" + f"Move: {s}")
+            if s is not None:
+                #######print(tabs*"\t" + f"OLD HP: {high_points}")
+                tmp1 = clear_rows(gamestate + s)
+                #tmp2 = getHighPointsFast(high_points, s, tmp1[1])
+                tmp2 = getHighPoints(tmp1[0])
+                #######print(tabs*"\t" + f"NEW HP: {tmp2}")
+                #######print(tabs*"\t" + f"NEW GS: {tmp1}")
                 if not look_ahead:
-                    tmp1 = clear_rows(gamestate + move)
-                    tmp2 = getHighPoints(high_points,tmp1[0])
-                    tmp = validate_move(move,high_points,tmp1[1],tmp1[2])
 
+
+                    tmp = validate_move(tmp1[0],s,high_points,tmp1[1],tmp2, tabs)
+
+                    #######print("SCORE",tmp)
+                    #######print("PIECE", piece)
+                    #######print("GS:", gamestate)
                     if tmp > score:
                         score = tmp
-                        objective = [tmp, move, curr_rotation, None]
+                        a = [tmp, s, n, None]
+                    ###print(tabs*"\t" + f"SCORE: {tmp}") 
                 else:
-                    tmp1 = clear_rows(gamestate + move)
-                    tmp2 = getHighPoints(high_points,tmp1[0])
-                    tmp_score = validate_move(move,high_points, tmp1[1],tmp1[2])
-                    
+                    tmp_score = validate_move(tmp1[0],s,high_points, tmp1[1],tmp1[2], tmp2, tabs)
+                    #####print(tmp2)
                     tmp = tetris(what_is_this_pokemon(look_ahead[0]), tmp1[0], tmp2, look_ahead[1:], tabs + 2)
                     if tmp:
                         tmp_score += tmp[0]
-
+                        ##print(tabs*"\t" + f"SCORE: {tmp_score}")
+                    #######print("TET", tmp)
+                    #######print("SCORE: ", type, i, tmp_score)
                     if tmp and tmp_score > score:
                         score = tmp_score
-                        objective = [tmp_score, move, curr_rotation, tmp[1]]        
-        curr_rotation += 1
-    return objective
+                        a = [tmp_score, s, n, tmp[1]]                            
+        n += 1
+    ##print((tabs)*"\t" + f"Best Result for {type}: {a}")
+    return a
+"""
+
+
+def tetris2(type, gamestate, high_points, look_ahead, pruning):
+    if type == None:
+        return [0, None, 0]
+    piece_r = piece_rotations[type]
+    score = -math.inf
+    n = 0
+    moves = []
+    best = None
+    #second_best = None
+    ##print("T",type)
+    floor_x = []
+    yy = []
+    for piece in piece_r:
+        floor_x = []
+        floor_y = []
+        prev_x = -1
+        for i in range(4):
+            if piece[i][0] != prev_x:
+                floor_x.append(piece[i][0])
+                floor_y.append(piece[i][1])
+                prev_x = piece[i][0]
+            if piece[i][1] not in yy:
+                yy.append(piece[i][1])
+        ##print(len(_bottom) - len(floor_x), 11 - len(floor_x) + 1)
+        ##print(len(_bottom), len(floor_x))
+        for i in range(1,len(_bottom) - len(floor_x)):
+            s = calculate_move(high_points,piece,i,floor_x, floor_y)
+            if s is not None:
+                tmp1 = clear_rows(gamestate + s[0], yy, s[1])
+                tmp2 = getHighPoints(tmp1[0])
+                tmp = validate_move(tmp1[0],tmp1[1],tmp2)
+                jog = Jogada(tmp,s[0],tmp1[0],tmp2,n)
+                moves.append(jog)
+                #print(jog)
+        n += 1
+    p = pruning if pruning < 6 else 6
+    tmp4 = heapq.nlargest(p, moves, key=lambda x: x.score)
+    for i in range(p):
+        next = tmp4[i]
+        #print(next)
+        ##print(next)
+        t = what_is_this_pokemon(look_ahead[0]) if look_ahead else None
+        ##print("NEXT", t, look_ahead)
+        next.score += tetris2(t, next.gamestate, next.high_points, look_ahead[1:], pruning)[0]
+        if next.score > score:
+            best = next
+            score = next.score
+
+    return best.result()
+
 
 
 def get_command(objective, piece_type, rotation, move):
     command = []
-    if move not in moves:
+    if move not in _moves:
         command.extend(["w"] * rotation)
         pivot = min([p[0] for p in objective])
         piece = rot_x[piece_type][rotation]
+        ####print("ROT_X",rot_x[piece_type])
         translacao = pivot - piece
         if translacao < 0:
             command.extend("a"*(-1*translacao))
         elif translacao > 0:
             command.extend("d"*translacao)
         command.append("s")
-        moves[move] = command
+        _moves[move] = command
     else:
-        command = moves[move]
+        command = _moves[move]
+    ####print("C:",command,move)
     return command
-        
 
-
-# ---------------------------------------------------------------------------------------------------------------------------
-# ---------------------------------------------------------------------------------------------------------------------------
-# ---------------------------------------------------------------------------------------------------------------------------
 
 import asyncio
 import getpass
 import json
 import os
+import time
 
 import websockets
 
@@ -389,82 +374,140 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
 
         # Receive information about static game properties
         await websocket.send(json.dumps({"cmd": "join", "name": agent_name}))
+
+        state = json.loads(
+            await websocket.recv()
+        )
+        #print(state)
+
+        global _bottom
+        global grid
+        global _height
+
+        x = state['dimensions'][0]
+        _height = state['dimensions'][1]
+
+        _bottom = [[i, _height] for i in range(x)]  # bottom
+        _lateral = [[0, i] for i in range(-5,_height)]  # left
+        _lateral.extend([[len(_bottom) - 1, i] for i in range(-5,_height)])
+
+
+        grid = _bottom + _lateral
+
         n = 0
         obj = None
-        times_to_rotate = 0
+        flg = True
+        
         move = ""
         command = []
         piece_type = ""
+        b = 0 # how many times should the piece rotate to get its info
+        # Time testing vars
         final_score = 0
-        flg = False
-        count = 0
-        tot_time = 0
+        sum0 = 0
+        count0 = 0
+        sum1 = 0
+        count1 = 0
+        
         while 1:
-            high_points = [30 for i in range(8)] # The height of each column
+            high_points = [_height] * (len(_bottom) - 2) # The height of each column
             try:
                 state = json.loads(
                     await websocket.recv()
                 )  # receive game update, this must be called timely or your game will get out of sync with the server
+                ##print(state)
+                if "piece" not in state:
+                    break
 
                 if "score" in state:
                     final_score = state["score"]
-
-                # Reset vars
-                if not state["piece"]:
+                key = ""
+                ##print("ROT:", piece_rotations)
+                if not state.get("piece"):
                     obj = None
                     command = []
                     move = ""
-                    piece_type = ""
                     flg = True
-
+                    piece_type = ""
                 else:
-                    if not obj:
+                    if not obj and b == 0:
+                        ##print(state)
                         # get the high_points of the current board
-                        if n != 0:
-                            high_points = getHighPoints(high_points, state["game"])
+                        if n != 0:  
+                            high_points = getHighPoints(state["game"])
+                            #####print("HHHHHHHHHHHHHHHHHHHHHHHHH", high_points)
                         n += 1
                         # find out what the current piece is 
                         piece_type = what_is_this_pokemon(state["piece"])
+                        #print("TYPE", piece_type)
                         if piece_type not in rot_x:
                             rot_x[piece_type] = []
-                            times_to_rotate = len(piece_rotations[piece_type])
-                            command = ["w"]*(times_to_rotate)
-                        
+                            piece_rotations[piece_type] = []
+                            b = type_len[piece_type]
+                            command = ["w"]*(b)
+                            continue
+
+                       
+                        #start_pos = state["piece"]
+                        # get the rotations of the current piece
                         # add the floor border to calculate HOLES based on it
-                        tmp = state["game"] + [[i,30] for i in range(1,9)] 
+                        tmp = state["game"] + [[i,_height] for i in range(1,len(_bottom)-1)] 
+                        ##print(tmp)
+                        #
+                        #
+                        #
+                        lookahead = []
+                        if len(piece_rotations) == 7:
+                            lookahead = state['next_pieces'][0:2]
                         tic = time.perf_counter()
-                        obj = tetris(piece_type, tmp, high_points,state['next_pieces'][0:1], 0)
+                        obj = tetris2(piece_type, tmp, high_points,lookahead, 2)
                         toc = time.perf_counter()
-                        count += 1
-                        tot_time += (toc - tic)
-                        move = f"{obj[2]}" + "".join([str(x[0]) for x in obj[1]])
+                        count0 += 1
+                        sum0 += (toc - tic)
+                        ##print(f"Elapsed time {toc - tic:0.4f} seconds")
                         #print("TYPE:",piece_type)
                         #print("OOOBJ", obj)
-                    elif times_to_rotate == 0 and command == [] and flg:
-                        command = get_command(objective=obj[1], piece_type=piece_type, rotation=obj[2], move=move)
-                        flg = False
+                        move = f"{piece_type}{obj[2]}" + "".join([str(x[0]) for x in obj[1]])
 
-                if times_to_rotate > 0:
-                    rot_x[piece_type].append(min([x[0] for x in state["piece"]]))
-                    times_to_rotate -= 1   
+
+                    elif b == 0 and command == [] and flg:
+                        
+                        tec = time.perf_counter()
+                        count1 += 1
+                        command = get_command(objective=obj[1], piece_type=piece_type, rotation=obj[2], move=move)
+                        tac = time.perf_counter()
+                        sum1 += (tac - tec)
+                        flg = False
+                        #####print(f"Elapsed Move time {tac - tec:0.8f} seconds")
+
+                if b > 0:
+                    min_x = min([x[0] for x in state["piece"]])
+                    min_y = max([x[1] for x in state["piece"]])
+                    rot_x[piece_type].append(min_x)
+                    piece_rotations[piece_type].append([])
+                    for p in state["piece"]:
+                        piece_rotations[piece_type][-1].append([ p[0]- min_x, p[1] - min_y ])
+                    piece_rotations[piece_type][-1].sort(key=lambda x: [x[0], -x[1]])
+                    b -= 1
 
                 if command != []:
+                    #####print("COMMAND", command)
                     await websocket.send(
                         json.dumps({"cmd": "key", "key": command[0]})
                     )  # send key command to server - you must implement this send in the AI age
                     command = command[1:]
+                    #####print("COMMANDAFT", command)
                 else:
                     await websocket.send(
                         json.dumps({"cmd": "key", "key": ""})
                     )  # send key command to server - you must implement this send in the AI age
-                
             except websockets.exceptions.ConnectionClosedOK:
-                print(final_score)
-                print("Server has cleanly disconnected us")
-                print(f"AVERAGE TIME: {tot_time/count:0.4f}")
+                #####print("Server has cleanly disconnected us")
+                #print(final_score)
+                #print(f"AVERAGE TIME: {sum0/count0:0.4f}")
+                ####print(f"AVERAGE MOVE TIME: {sum1/count1:0.8f}")
                 return
 
-            # Next line is not needed for AI agent
 
 
 # DO NOT CHANGE THE LINES BELLOW
@@ -475,3 +518,5 @@ SERVER = os.environ.get("SERVER", "localhost")
 PORT = os.environ.get("PORT", "8000")
 NAME = os.environ.get("NAME", getpass.getuser())
 loop.run_until_complete(agent_loop(f"{SERVER}:{PORT}", NAME))
+
+# AVERAGE TIME: 0.0324
