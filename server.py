@@ -16,7 +16,7 @@ import websockets
 from game import Game
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", filemode="w"
 )
 wslogger = logging.getLogger("websockets")
 wslogger.setLevel(logging.WARN)

@@ -18,9 +18,18 @@ grid = _bottom + _lateral
 rot_x = {}
 moves = {}
 
+type_len = {
+    "i":2,
+    "o":1,
+    "s":2,
+    "z":2,
+    "j":4,
+    "l":4,
+    "t":4
+}
 
 # Map with the rotations of each piece
-piece_rotations = {
+piecee_rotations = {
     "i": [
         [
             [0,0],[1,0],[2,0],[3,0]
@@ -91,6 +100,8 @@ piece_rotations = {
         ]
     ]
 }
+
+piece_rotations = {}
 
 class Jogada():
     def __init__(self, score, positions, gamestate, high_points, rotation) -> None:
@@ -172,7 +183,7 @@ def getHighPointsFast(highpoints, piece, lines):
     return tmp
 
 def getHighPoints(gamestate):
-    tmp = [30, 30, 30, 30, 30, 30, 30, 30]
+    tmp = [30]*8
     for block in gamestate:
         tmp[ block[0]-1 ] = block[1] if block[1] < tmp[ block[0]-1 ] else tmp[ block[0]-1 ]
     return tmp
@@ -410,16 +421,18 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
         p_t = ""
         piece_type = ""
         c = 1
+        b = 0
         while 1:
             high_points = [30 for i in range(8)] # The height of each column
             try:
                 state = json.loads(
                     await websocket.recv()
                 )  # receive game update, this must be called timely or your game will get out of sync with the server
+                print(state)
                 if "score" in state:
                     final_score = state["score"]
                 key = ""
-                
+                #print("ROT:", piece_rotations)
                 if not state["piece"]:
                     obj = None
                     command = []
@@ -427,7 +440,7 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                     flg = True
                     piece_type = ""
                 else:
-                    if not obj:
+                    if not obj and b == 0:
                         #print(c)
                         #print(state)
                         c += 1
@@ -441,8 +454,10 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                         if piece_type not in rot_x:
                             p_t = piece_type
                             rot_x[p_t] = []
-                            b = len(piece_rotations[p_t])
+                            piece_rotations[p_t] = []
+                            b = type_len[p_t]
                             command = ["w"]*(b)
+                            continue
 
                        
                         #start_pos = state["piece"]
@@ -453,9 +468,12 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                         #
                         #
                         #
+                        lookahead = []
+                        if len(piece_rotations) == 7:
+                            lookahead = state['next_pieces'][0:2]
                         tic = time.perf_counter()
 
-                        obj = tetris2(piece_type, tmp, high_points,state['next_pieces'][0:2], 0, 2)
+                        obj = tetris2(piece_type, tmp, high_points,lookahead, 0, 2)
                         toc = time.perf_counter()
                         count += 1
                         sum += (toc - tic)
@@ -476,7 +494,13 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                         ####print(f"Elapsed Move time {tac - tec:0.8f} seconds")
 
                 if b > 0:
-                    rot_x[p_t].append(min([x[0] for x in state["piece"]]))
+                    min_x = min([x[0] for x in state["piece"]])
+                    min_y = max([x[1] for x in state["piece"]])
+                    rot_x[p_t].append(min_x)
+                    piece_rotations[p_t].append([])
+                    for p in state["piece"]:
+                        piece_rotations[p_t][-1].append([ p[0]- min_x, p[1] - min_y ])
+                    piece_rotations[p_t][-1].sort(key=lambda x: [x[0], -x[1]])
                     b -= 1
 
                 if command != []:

@@ -1,7 +1,7 @@
 
 from collections import Counter
 import math
-from time import time
+import time
 #import logging
 
 from shape import S
@@ -363,7 +363,7 @@ def get_command(objective, piece_type, rotation, move):
             command.extend("a"*(-1*translacao))
         elif translacao > 0:
             command.extend("d"*translacao)
-        #command.append("s")
+        command.append("s")
         moves[move] = command
     else:
         command = moves[move]
@@ -397,6 +397,8 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
         piece_type = ""
         final_score = 0
         flg = False
+        count = 0
+        tot_time = 0
         while 1:
             high_points = [30 for i in range(8)] # The height of each column
             try:
@@ -430,7 +432,11 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                         
                         # add the floor border to calculate HOLES based on it
                         tmp = state["game"] + [[i,30] for i in range(1,9)] 
+                        tic = time.perf_counter()
                         obj = tetris(piece_type, tmp, high_points,state['next_pieces'][0:1], 0)
+                        toc = time.perf_counter()
+                        count += 1
+                        tot_time += (toc - tic)
                         move = f"{obj[2]}" + "".join([str(x[0]) for x in obj[1]])
                         #print("TYPE:",piece_type)
                         #print("OOOBJ", obj)
@@ -455,6 +461,7 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
             except websockets.exceptions.ConnectionClosedOK:
                 print(final_score)
                 print("Server has cleanly disconnected us")
+                print(f"AVERAGE TIME: {tot_time/count:0.4f}")
                 return
 
             # Next line is not needed for AI agent
