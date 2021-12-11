@@ -147,20 +147,32 @@ def valid(piece, gamestate):
 
 
 # Calculate the possible move at a certain column
-def calculate_move(highpoints, piece, column, xx, yy):
+def calculate_move(highpoints, piece, column, xx, yy=None):
     #####print(column)
     ###print("HP", gamestate)
     pivot = [0, _height+1]
     tmp = []
     for x in xx:
-        if highpoints[column + x - 1] - yy[x] < pivot[1]:
-            pivot = [x, highpoints[column + x - 1] - yy[x]]
-            tmp = [x,highpoints[column + x - 1]]
+        if highpoints[column + x[0] - 1] - x[1] < pivot[1]:
+            pivot = [x[0], highpoints[column + x[0] - 1] - x[1]]
+            tmp = [x[0],highpoints[column + x[0] - 1]]
 
     offset = max([y[1] for y in piece if y[0] == pivot[0]])
     #####print("OFFSET", offset)
     bb = [[p[0] + column, tmp[1] - 1 + p[1] - offset] for p in piece ]
     return bb, tmp[1]
+
+def getHighPointsFast(highpoints, columns, lines):
+    tmp = highpoints.copy()
+    for i in range(len(highpoints)):
+        tmp[i] = 1
+
+def columnize(gamestate):
+    tmp = [[_height] for _ in range(len(_bottom) - 2)]
+    for block in gamestate:
+        tmp[ block[0]-1 ].append(block[1])
+    return tmp
+
 
 def getHighPoints(gamestate):
     tmp = [_height] * (len(_bottom) - 2)
@@ -305,15 +317,14 @@ def tetris2(type, gamestate, high_points, look_ahead, pruning):
         prev_x = -1
         for i in range(4):
             if piece[i][0] != prev_x:
-                floor_x.append(piece[i][0])
-                floor_y.append(piece[i][1])
+                floor_x.append(piece[i])
                 prev_x = piece[i][0]
             if piece[i][1] not in yy:
                 yy.append(piece[i][1])
         ##print(len(_bottom) - len(floor_x), 11 - len(floor_x) + 1)
         ##print(len(_bottom), len(floor_x))
         for i in range(1,len(_bottom) - len(floor_x)):
-            s = calculate_move(high_points,piece,i,floor_x, floor_y)
+            s = calculate_move(high_points,piece,i,floor_x)
             if s is not None:
                 tmp1 = clear_rows(gamestate + s[0], yy, s[1])
                 tmp2 = getHighPoints(tmp1[0])
@@ -324,8 +335,7 @@ def tetris2(type, gamestate, high_points, look_ahead, pruning):
         n += 1
     p = pruning if pruning < 6 else 6
     tmp4 = heapq.nlargest(p, moves, key=lambda x: x.score)
-    for i in range(p):
-        next = tmp4[i]
+    for next in tmp4:
         #print(next)
         ##print(next)
         t = what_is_this_pokemon(look_ahead[0]) if look_ahead else None
@@ -336,8 +346,6 @@ def tetris2(type, gamestate, high_points, look_ahead, pruning):
             score = next.score
 
     return best.result()
-
-
 
 def get_command(objective, piece_type, rotation, move):
     command = []
@@ -396,7 +404,6 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
 
         n = 0
         obj = None
-        flg = True
         
         move = ""
         command = []
@@ -410,7 +417,7 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
         count1 = 0
         
         while 1:
-            high_points = [_height] * (len(_bottom) - 2) # The height of each column
+            #high_points = [_height] * (len(_bottom) - 2) # The height of each column
             try:
                 state = json.loads(
                     await websocket.recv()
@@ -427,14 +434,13 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                     obj = None
                     command = []
                     move = ""
-                    flg = True
                     piece_type = ""
                 else:
                     if not obj and b == 0:
                         ##print(state)
                         # get the high_points of the current board
-                        if n != 0:  
-                            high_points = getHighPoints(state["game"])
+                        #if n != 0:  
+                        high_points = getHighPoints(state["game"])
                             #####print("HHHHHHHHHHHHHHHHHHHHHHHHH", high_points)
                         n += 1
                         # find out what the current piece is 
@@ -470,14 +476,13 @@ async def agent_loop(server_address="localhost:8000", agent_name="student"):
                         move = f"{piece_type}{obj[2]}" + "".join([str(x[0]) for x in obj[1]])
 
 
-                    elif b == 0 and command == [] and flg:
+                    elif b == 0 and command == []:
                         
                         tec = time.perf_counter()
                         count1 += 1
                         command = get_command(objective=obj[1], piece_type=piece_type, rotation=obj[2], move=move)
                         tac = time.perf_counter()
                         sum1 += (tac - tec)
-                        flg = False
                         #####print(f"Elapsed Move time {tac - tec:0.8f} seconds")
 
                 if b > 0:
